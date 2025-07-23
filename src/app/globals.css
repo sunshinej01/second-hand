@@ -24,3 +24,104 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* 모바일 앱 스타일 최적화 */
+html {
+  /* 모바일에서 부드러운 스크롤 */
+  -webkit-overflow-scrolling: touch;
+  /* 줌 방지 */
+  touch-action: manipulation;
+}
+
+body {
+  /* 모바일에서 터치 스크롤 최적화 */
+  overscroll-behavior: none;
+  /* 기본 선택 방지 (앱처럼) */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* 텍스트는 선택 가능하게 */
+p, span, h1, h2, h3, h4, h5, h6 {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+/* Safe Area 지원 */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* 터치 대상 최적화 */
+.touch-manipulation {
+  touch-action: manipulation;
+}
+
+/* 모바일에서 버튼 탭 하이라이트 제거 */
+button, .cursor-pointer {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 스크롤바 숨기기 (모바일 앱처럼) */
+::-webkit-scrollbar {
+  display: none;
+}
+
+/* Firefox */
+html {
+  scrollbar-width: none;
+}
+
+/* 모바일 뷰포트 최적화 */
+@supports (-webkit-touch-callout: none) {
+  /* iOS Safari */
+  .min-h-screen {
+    min-height: -webkit-fill-available;
+  }
+}
+
+/* 텍스트 줄임표 클래스 */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* 스크롤바 숨기기 유틸리티 */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+
+/* 모바일에서 활성 상태 스타일 개선 */
+@media (hover: none) and (pointer: coarse) {
+  .hover\:bg-gray-50:hover {
+    background-color: transparent;
+  }
+  
+  .active\:bg-gray-100:active {
+    background-color: rgb(243 244 246);
+  }
+  
+  .hover\:bg-gray-100:hover {
+    background-color: transparent;
+  }
+  
+  .active\:bg-gray-200:active {
+    background-color: rgb(229 231 235);
+  }
+}
