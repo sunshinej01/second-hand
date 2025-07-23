@@ -1,22 +1,26 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import ProductCard from '../components/ProductCard';
 
 export default function ProductsPage() {
   const [products, setProducts] = useState([]);
+  const [userProducts, setUserProducts] = useState([]);
   const [activeTab, setActiveTab] = useState('중고거래');
+  const [isLoading, setIsLoading] = useState(false);
 
-  // 탭 옵션들
-  const [tabs, setTabs] = useState([
+  // 탭 옵션들 (메모이제이션)
+  const initialTabs = useMemo(() => [
     { id: 'all', name: '전체', count: 0 },
     { id: 'secondhand', name: '중고거래', count: 0 },
     { id: 'community', name: '동네생활', count: 0 },
     { id: 'question', name: '질문', count: 0 }
-  ]);
+  ], []);
+  
+  const [tabs, setTabs] = useState(initialTabs);
 
-  // 동네생활 게시글 데이터
-  const communityPosts = [
+  // 동네생활 게시글 데이터 (메모이제이션으로 최적화)
+  const communityPosts = useMemo(() => [
     {
       id: 1,
       title: '2030 동네친구 구해요',
@@ -70,10 +74,10 @@ export default function ProductsPage() {
       profileColor: '#0891B2',
       comments: []
     }
-  ];
+  ], []);
 
-  // 탭별 개수 업데이트
-  const updateTabCounts = (allProducts) => {
+  // 탭별 개수 업데이트 (메모이제이션)
+  const updateTabCounts = useCallback((allProducts) => {
     const secondhandCount = allProducts.length;
     const communityCount = communityPosts.length;
     const questionCount = 0; // 추후 질문 데이터 추가 시 업데이트
@@ -84,16 +88,16 @@ export default function ProductsPage() {
       { id: 'community', name: '동네생활', count: communityCount },
       { id: 'question', name: '질문', count: questionCount }
     ]);
-  };
+  }, [communityPosts.length]);
 
-  // 탭 변경 처리
-  const handleTabChange = (tabName) => {
+  // 탭 변경 처리 (메모이제이션)
+  const handleTabChange = useCallback((tabName) => {
     setActiveTab(tabName);
     // 추후 탭별 데이터 필터링 로직 추가 가능
-  };
+  }, []);
 
-  // 업로드 시간 포맷팅
-  const getRelativeTime = (uploadTime) => {
+  // 업로드 시간 포맷팅 (메모이제이션)
+  const getRelativeTime = useCallback((uploadTime) => {
     const now = new Date();
     const uploadDate = new Date(uploadTime);
     const diffInHours = Math.floor((now - uploadDate) / (1000 * 60 * 60));
@@ -105,17 +109,17 @@ export default function ProductsPage() {
     if (diffInDays < 7) return `${diffInDays}일 전`;
     
     return uploadDate.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
-  };
+  }, []);
 
-  // 매너온도 색상 계산
-  const getTemperatureColor = (temp) => {
+  // 매너온도 색상 계산 (메모이제이션)
+  const getTemperatureColor = useCallback((temp) => {
     if (temp >= 40) return 'text-green-500';
     if (temp >= 36.5) return 'text-blue-500';
     return 'text-orange-500';
-  };
+  }, []);
 
-  // 동네생활 게시글 컴포넌트
-  const CommunityPost = ({ post }) => (
+  // 동네생활 게시글 컴포넌트 (메모이제이션으로 최적화)
+  const CommunityPost = useCallback(({ post }) => (
     <div className="bg-white border-b border-gray-100 p-4">
       {/* 게시글 헤더 */}
       <div className="flex items-center gap-3 mb-3">
@@ -170,10 +174,10 @@ export default function ProductsPage() {
         </div>
       )}
     </div>
-  );
+  ), [getRelativeTime, getTemperatureColor]);
 
-  // 기본 상품 데이터 (데모용)
-  const defaultProducts = [
+  // 기본 상품 데이터 (메모이제이션으로 최적화)
+  const defaultProducts = useMemo(() => [
     {
       id: 1,
       name: '아이폰 14 Pro 128GB',
@@ -228,47 +232,73 @@ export default function ProductsPage() {
       location: '서울 마포구',
       uploadTime: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) // 8일 전
     }
-  ];
+  ], []);
 
-  // 컴포넌트 마운트 시 로컬 스토리지에서 상품 목록 불러오기
+  // 기본 상품을 먼저 로드하고 사용자 데이터를 나중에 병합 (성능 최적화)
   useEffect(() => {
-    try {
-      const savedProducts = JSON.parse(localStorage.getItem('products') || '[]');
-      
-      // uploadTime을 Date 객체로 변환
-      const processedSavedProducts = savedProducts.map(product => ({
-        ...product,
-        uploadTime: new Date(product.uploadTime)
-      }));
-
-      // 사용자 추가 상품 + 기본 상품을 합쳐서 최신순으로 정렬
-      const allProducts = [...processedSavedProducts, ...defaultProducts];
-      allProducts.sort((a, b) => new Date(b.uploadTime) - new Date(a.uploadTime));
-      
-      setProducts(allProducts);
-      
-      // 탭별 개수 업데이트
-      updateTabCounts(allProducts);
-    } catch (error) {
-      console.error('상품 목록 로드 실패:', error);
-      setProducts(defaultProducts);
-    }
-  }, []);
-
-  // 페이지가 포커스될 때마다 상품 목록 새로고침 (새 상품 추가 후 돌아왔을 때)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        try {
-          const savedProducts = JSON.parse(localStorage.getItem('products') || '[]');
+    // 1. 먼저 기본 상품을 즉시 표시
+    setProducts(defaultProducts);
+    updateTabCounts(defaultProducts);
+    
+    // 2. 로컬 스토리지 데이터를 비동기로 로드
+    const loadUserProducts = async () => {
+      try {
+        setIsLoading(true);
+        
+        // 약간의 지연을 두어 UI가 먼저 렌더링되도록 함
+        await new Promise(resolve => setTimeout(resolve, 0));
+        
+        const savedProducts = JSON.parse(localStorage.getItem('products') || '[]');
+        
+        if (savedProducts.length > 0) {
+          // uploadTime을 Date 객체로 변환
           const processedSavedProducts = savedProducts.map(product => ({
             ...product,
             uploadTime: new Date(product.uploadTime)
           }));
-                  const allProducts = [...processedSavedProducts, ...defaultProducts];
-        allProducts.sort((a, b) => new Date(b.uploadTime) - new Date(a.uploadTime));
-        setProducts(allProducts);
-        updateTabCounts(allProducts);
+
+          setUserProducts(processedSavedProducts);
+          
+          // 사용자 추가 상품 + 기본 상품을 합쳐서 최신순으로 정렬
+          const allProducts = [...processedSavedProducts, ...defaultProducts];
+          allProducts.sort((a, b) => new Date(b.uploadTime) - new Date(a.uploadTime));
+          
+          setProducts(allProducts);
+          updateTabCounts(allProducts);
+        }
+      } catch (error) {
+        console.error('상품 목록 로드 실패:', error);
+        // 에러 시에도 기본 상품은 표시
+        setProducts(defaultProducts);
+        updateTabCounts(defaultProducts);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadUserProducts();
+  }, [defaultProducts, updateTabCounts]);
+
+  // 페이지가 포커스될 때마다 상품 목록 새로고침 (최적화)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && !isLoading) {
+        try {
+          const savedProducts = JSON.parse(localStorage.getItem('products') || '[]');
+          
+          // 변경사항이 있는지 확인
+          if (savedProducts.length !== userProducts.length) {
+            const processedSavedProducts = savedProducts.map(product => ({
+              ...product,
+              uploadTime: new Date(product.uploadTime)
+            }));
+            
+            setUserProducts(processedSavedProducts);
+            const allProducts = [...processedSavedProducts, ...defaultProducts];
+            allProducts.sort((a, b) => new Date(b.uploadTime) - new Date(a.uploadTime));
+            setProducts(allProducts);
+            updateTabCounts(allProducts);
+          }
         } catch (error) {
           console.error('상품 목록 새로고침 실패:', error);
         }
@@ -277,7 +307,7 @@ export default function ProductsPage() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, []);
+  }, [isLoading, userProducts.length, defaultProducts, updateTabCounts]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -331,22 +361,22 @@ export default function ProductsPage() {
       {/* 탭별 컨텐츠 */}
       {activeTab === '중고거래' && (
         <div className="w-full max-w-sm sm:max-w-md lg:max-w-lg xl:max-w-xl mx-auto bg-white shadow-sm">
-          <div className="divide-y divide-gray-100">
-            {products.length === 0 ? (
-              // 로딩 상태
-              <div className="flex flex-col items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mb-4"></div>
-                <p className="text-gray-500">상품 목록을 불러오는 중...</p>
-              </div>
-            ) : (
-              products.map(product => (
-                <ProductCard 
-                  key={product.id}
-                  product={product}
-                />
-              ))
-            )}
-          </div>
+                  <div className="divide-y divide-gray-100">
+          {products.map(product => (
+            <ProductCard 
+              key={product.id}
+              product={product}
+            />
+          ))}
+          
+          {/* 사용자 데이터 로딩 중 표시 */}
+          {isLoading && products.length > 0 && (
+            <div className="flex items-center justify-center py-4 bg-gray-50">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-500 mr-2"></div>
+              <p className="text-sm text-gray-500">추가 상품을 불러오는 중...</p>
+            </div>
+          )}
+        </div>
         </div>
       )}
 
