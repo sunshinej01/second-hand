@@ -17,9 +17,6 @@ const nextConfig = {
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
   
-  // 빌드 최적화
-  swcMinify: true, // SWC 미니파이어 사용
-  
   // 정적 최적화
   trailingSlash: false,
   

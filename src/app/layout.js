@@ -15,14 +15,6 @@ export const metadata = {
   title: "우리동네 중고거래",
   description: "믿을 만한 중고거래, 우리동네에서 직거래하세요",
   keywords: "중고거래, 당근마켓, 동네생활, 중고물품, 직거래",
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-    viewportFit: 'cover',
-  },
-  themeColor: '#ffffff',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
@@ -36,6 +28,15 @@ export const metadata = {
     follow: true,
   },
   manifest: '/manifest.json',
+};
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
+  themeColor: '#ffffff',
 };
 
 export default function RootLayout({ children }) {
