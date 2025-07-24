@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import ProductCard from '../components/ProductCard';
+import { productAPI } from '../../lib/api';
 
 function SearchPageContent() {
   const router = useRouter();
@@ -140,14 +141,49 @@ function SearchPageContent() {
     addToRecentSearches(query.trim());
 
     try {
-      // 로컬 스토리지에서 사용자 추가 상품 불러오기
-      const savedProducts = JSON.parse(localStorage.getItem('products') || '[]');
-      const allProducts = [...savedProducts, ...defaultProducts];
+      let allProducts = [];
 
-      // 상품 검색 (이름, 설명에서)
-      const filteredProducts = allProducts.filter(product => 
+      // 1. Supabase에서 검색
+      const { data: supabaseResults, error } = await productAPI.searchProducts(query.trim());
+      
+      if (error) {
+        console.error('Supabase 검색 오류:', error);
+      } else if (supabaseResults && supabaseResults.length > 0) {
+        // Supabase 데이터를 앱에서 사용하는 형태로 변환
+        const convertedProducts = supabaseResults.map(product => ({
+          id: product.id,
+          name: product.title || product.name,
+          price: product.price,
+          image: product.image_url ? { url: product.image_url } : { color: '#4338CA', icon: '📱' },
+          description: product.description,
+          location: product.location || '위치 미등록',
+          uploadTime: new Date(product.created_at)
+        }));
+        allProducts = [...allProducts, ...convertedProducts];
+      }
+
+      // 2. 로컬 스토리지에서도 검색 (기존 데이터 유지)
+      try {
+        const savedProducts = JSON.parse(localStorage.getItem('products') || '[]');
+        const localFilteredProducts = savedProducts.filter(product => 
+          product.name.toLowerCase().includes(query.toLowerCase()) ||
+          product.description.toLowerCase().includes(query.toLowerCase())
+        );
+        allProducts = [...allProducts, ...localFilteredProducts];
+      } catch (localError) {
+        console.error('로컬 검색 오류:', localError);
+      }
+
+      // 3. 기본 데이터에서도 검색 (백업용)
+      const defaultFilteredProducts = defaultProducts.filter(product => 
         product.name.toLowerCase().includes(query.toLowerCase()) ||
         product.description.toLowerCase().includes(query.toLowerCase())
+      );
+      allProducts = [...allProducts, ...defaultFilteredProducts];
+
+      // 중복 제거 (ID 기준)
+      const uniqueProducts = allProducts.filter((product, index, self) => 
+        index === self.findIndex(p => p.id === product.id)
       );
 
       // 동네생활 게시글 검색 (제목, 내용에서)
@@ -157,13 +193,25 @@ function SearchPageContent() {
       );
 
       setSearchResults({
-        products: filteredProducts,
+        products: uniqueProducts,
         community: filteredCommunity
       });
 
     } catch (error) {
       console.error('검색 실패:', error);
-      setSearchResults({ products: [], community: [] });
+      // 에러 시 기본 데이터로 폴백
+      const filteredProducts = defaultProducts.filter(product => 
+        product.name.toLowerCase().includes(query.toLowerCase()) ||
+        product.description.toLowerCase().includes(query.toLowerCase())
+      );
+      const filteredCommunity = communityPosts.filter(post =>
+        post.title.toLowerCase().includes(query.toLowerCase()) ||
+        post.content.toLowerCase().includes(query.toLowerCase())
+      );
+      setSearchResults({
+        products: filteredProducts,
+        community: filteredCommunity
+      });
     } finally {
       setIsSearching(false);
     }

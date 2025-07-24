@@ -1,12 +1,15 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import ProductCard from '../components/ProductCard';
+import { productAPI } from '../../lib/api';
 
 export default function ProductsPage() {
+  const router = useRouter();
   const [products, setProducts] = useState([]);
   const [userProducts, setUserProducts] = useState([]);
-  const [activeTab, setActiveTab] = useState('중고거래');
+  const [activeTab, setActiveTab] = useState('secondhand'); // id로 초기화
   const [isLoading, setIsLoading] = useState(false);
 
   // 탭 옵션들 (메모이제이션)
@@ -91,8 +94,8 @@ export default function ProductsPage() {
   }, [communityPosts.length]);
 
   // 탭 변경 처리 (메모이제이션)
-  const handleTabChange = useCallback((tabName) => {
-    setActiveTab(tabName);
+  const handleTabChange = useCallback((tabId) => {
+    setActiveTab(tabId);
     // 추후 탭별 데이터 필터링 로직 추가 가능
   }, []);
 
@@ -234,41 +237,67 @@ export default function ProductsPage() {
     }
   ], []);
 
-  // 기본 상품을 먼저 로드하고 사용자 데이터를 나중에 병합 (성능 최적화)
+  // Supabase에서 상품 데이터 로드
   useEffect(() => {
-    // 1. 먼저 기본 상품을 즉시 표시
-    setProducts(defaultProducts);
-    updateTabCounts(defaultProducts);
-    
-    // 2. 로컬 스토리지 데이터를 비동기로 로드
-    const loadUserProducts = async () => {
+    const loadProducts = async () => {
       try {
         setIsLoading(true);
         
-        // 약간의 지연을 두어 UI가 먼저 렌더링되도록 함
-        await new Promise(resolve => setTimeout(resolve, 0));
+        // Supabase에서 모든 제품 조회
+        const { data: supabaseProducts, error } = await productAPI.getAllProducts();
         
-        const savedProducts = JSON.parse(localStorage.getItem('products') || '[]');
-        
-        if (savedProducts.length > 0) {
-          // uploadTime을 Date 객체로 변환
-          const processedSavedProducts = savedProducts.map(product => ({
-            ...product,
-            uploadTime: new Date(product.uploadTime)
-          }));
-
-          setUserProducts(processedSavedProducts);
-          
-          // 사용자 추가 상품 + 기본 상품을 합쳐서 최신순으로 정렬
-          const allProducts = [...processedSavedProducts, ...defaultProducts];
-          allProducts.sort((a, b) => new Date(b.uploadTime) - new Date(a.uploadTime));
-          
-          setProducts(allProducts);
-          updateTabCounts(allProducts);
+        if (error) {
+          console.error('Supabase 제품 조회 오류:', error);
+          // 에러 시 기본 상품 표시
+          setProducts(defaultProducts);
+          updateTabCounts(defaultProducts);
+          return;
         }
+
+        // Supabase 데이터가 있으면 사용, 없으면 기본 데이터 사용
+        let allProducts = [];
+        
+        if (supabaseProducts && supabaseProducts.length > 0) {
+          // Supabase 데이터를 앱에서 사용하는 형태로 변환
+          const convertedProducts = supabaseProducts.map(product => ({
+            id: product.id,
+            name: product.title || product.name,
+            price: product.price,
+            image: product.image_url ? { url: product.image_url } : { color: '#4338CA', icon: '📱' },
+            description: product.description,
+            location: product.location || '위치 미등록',
+            uploadTime: new Date(product.created_at)
+          }));
+          allProducts = convertedProducts;
+        } else {
+          // Supabase에 데이터가 없으면 기본 데이터 사용
+          allProducts = defaultProducts;
+        }
+
+        // 로컬 스토리지의 추가 상품도 함께 로드
+        try {
+          const savedProducts = JSON.parse(localStorage.getItem('products') || '[]');
+          if (savedProducts.length > 0) {
+            const processedSavedProducts = savedProducts.map(product => ({
+              ...product,
+              uploadTime: new Date(product.uploadTime)
+            }));
+            setUserProducts(processedSavedProducts);
+            allProducts = [...allProducts, ...processedSavedProducts];
+          }
+        } catch (localError) {
+          console.error('로컬 스토리지 데이터 로드 오류:', localError);
+        }
+
+        // 최신순으로 정렬
+        allProducts.sort((a, b) => new Date(b.uploadTime) - new Date(a.uploadTime));
+        
+        setProducts(allProducts);
+        updateTabCounts(allProducts);
+        
       } catch (error) {
         console.error('상품 목록 로드 실패:', error);
-        // 에러 시에도 기본 상품은 표시
+        // 최종 에러 시 기본 상품 표시
         setProducts(defaultProducts);
         updateTabCounts(defaultProducts);
       } finally {
@@ -276,7 +305,7 @@ export default function ProductsPage() {
       }
     };
 
-    loadUserProducts();
+    loadProducts();
   }, [defaultProducts, updateTabCounts]);
 
   // 페이지가 포커스될 때마다 상품 목록 새로고침 (최적화)
@@ -339,9 +368,9 @@ export default function ProductsPage() {
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => handleTabChange(tab.name)}
+                onClick={() => handleTabChange(tab.id)}
                 className={`flex-shrink-0 px-4 py-3 text-sm font-medium transition-colors relative ${
-                  activeTab === tab.name
+                  activeTab === tab.id
                     ? 'text-orange-500'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
@@ -349,7 +378,7 @@ export default function ProductsPage() {
                 <span>{tab.name}</span>
                 
                 {/* 활성 탭 인디케이터 */}
-                {activeTab === tab.name && (
+                {activeTab === tab.id && (
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-500"></div>
                 )}
               </button>
@@ -359,7 +388,7 @@ export default function ProductsPage() {
       </div>
 
       {/* 탭별 컨텐츠 */}
-      {activeTab === '중고거래' && (
+      {activeTab === 'secondhand' && (
         <div className="w-full max-w-sm sm:max-w-md lg:max-w-lg xl:max-w-xl mx-auto bg-white shadow-sm">
                   <div className="divide-y divide-gray-100">
           {products.map(product => (
@@ -380,8 +409,7 @@ export default function ProductsPage() {
         </div>
       )}
 
-      {/* 다른 탭들 */}
-      {activeTab === '전체' && (
+      {activeTab === 'all' && (
         <div className="w-full max-w-sm sm:max-w-md lg:max-w-lg xl:max-w-xl mx-auto bg-white shadow-sm">
           <div className="divide-y divide-gray-100">
             {/* 동네생활 게시글 */}
@@ -400,7 +428,7 @@ export default function ProductsPage() {
         </div>
       )}
 
-      {activeTab === '동네생활' && (
+      {activeTab === 'community' && (
         <div className="w-full max-w-sm sm:max-w-md lg:max-w-lg xl:max-w-xl mx-auto bg-white shadow-sm">
           <div className="divide-y divide-gray-100">
             {communityPosts.map(post => (
@@ -410,7 +438,7 @@ export default function ProductsPage() {
         </div>
       )}
 
-      {activeTab === '질문' && (
+      {activeTab === 'question' && (
         <div className="w-full max-w-sm sm:max-w-md lg:max-w-lg xl:max-w-xl mx-auto bg-white shadow-sm">
           <div className="text-center py-12 text-gray-500">
             <p>질문 탭 기능은 준비 중입니다.</p>
@@ -423,25 +451,35 @@ export default function ProductsPage() {
         <div className="w-full max-w-sm sm:max-w-md lg:max-w-lg xl:max-w-xl mx-auto px-2 sm:px-4 py-2">
           <div className="flex justify-around">
             <button className="flex flex-col items-center py-2 px-2 sm:px-3 rounded-lg hover:bg-gray-50 active:bg-gray-100 transition-colors">
-              <svg className="w-5 h-5 sm:w-6 sm:h-6 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M10.707 2.293a1 1 0 00-1.414 0l-9 9a1 1 0 001.414 1.414L2 12.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-4.586l.293.293a1 1 0 001.414-1.414l-9-9z" />
+              <svg className="w-5 h-5 sm:w-6 sm:h-6 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v6h-8V5z" />
               </svg>
-              <span className="text-xs text-orange-500 font-medium mt-1">홈</span>
+              <span className="text-xs text-orange-500 font-medium mt-1">중고거래</span>
             </button>
-            <button className="flex flex-col items-center py-2 px-2 sm:px-3 rounded-lg hover:bg-gray-50 active:bg-gray-100 transition-colors">
+            <button 
+              onClick={() => router.push('/community')}
+              className="flex flex-col items-center py-2 px-2 sm:px-3 rounded-lg hover:bg-gray-50 active:bg-gray-100 transition-colors"
+            >
               <svg className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
               <span className="text-xs text-gray-400 mt-1">동네생활</span>
             </button>
-            <button className="flex flex-col items-center py-2 px-2 sm:px-3 rounded-lg hover:bg-gray-50 active:bg-gray-100 transition-colors">
+            <button 
+              onClick={() => router.push('/chat')}
+              className="flex flex-col items-center py-2 px-2 sm:px-3 rounded-lg hover:bg-gray-50 active:bg-gray-100 transition-colors"
+            >
               <svg className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
               </svg>
               <span className="text-xs text-gray-400 mt-1">채팅</span>
             </button>
-            <button className="flex flex-col items-center py-2 px-2 sm:px-3 rounded-lg hover:bg-gray-50 active:bg-gray-100 transition-colors">
+            <button 
+              onClick={() => router.push('/profile')}
+              className="flex flex-col items-center py-2 px-2 sm:px-3 rounded-lg hover:bg-gray-50 active:bg-gray-100 transition-colors"
+            >
               <svg className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>

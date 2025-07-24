@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { productAPI } from '../../lib/api';
 
 export default function AddProductPage() {
   const router = useRouter();
@@ -84,37 +85,110 @@ export default function AddProductPage() {
     setIsSubmitting(true);
 
     try {
-      // 기존 상품 목록 가져오기
-      const existingProducts = JSON.parse(localStorage.getItem('products') || '[]');
-      
-      // 새 상품 생성
-      const newProduct = {
-        id: Date.now(),
-        name: formData.name,
-        price: parseInt(formData.price),
-        image: formData.image,
+      // Supabase에 저장할 데이터 준비
+      const productData = {
+        title: formData.name,
         description: formData.description,
+        price: parseInt(formData.price),
         location: formData.location,
-        tradeMethod: formData.tradeMethod,
-        uploadTime: new Date().toISOString()
+        trade_method: formData.tradeMethod,
+        // 이미지는 JSON 형태로 저장 (추후 실제 이미지 업로드 기능으로 확장 가능)
+        image_data: JSON.stringify(formData.image),
+        // 필요한 추가 필드들
+        category: getIconCategory(formData.image.icon),
+        status: 'available' // 판매중
       };
 
-      // 로컬 스토리지에 저장
-      const updatedProducts = [newProduct, ...existingProducts];
-      localStorage.setItem('products', JSON.stringify(updatedProducts));
+      // 1. Supabase에 저장 시도
+      const { data: supabaseData, error: supabaseError } = await productAPI.createProduct(productData);
+      
+      let savedSuccessfully = false;
+      
+      if (supabaseError) {
+        console.error('Supabase 저장 오류:', supabaseError);
+        // Supabase 저장 실패 시 로컬 스토리지에라도 저장
+      } else {
+        console.log('Supabase에 성공적으로 저장:', supabaseData);
+        savedSuccessfully = true;
+      }
 
-      // 성공 메시지 (잠시 보여주기)
-      alert('상품이 성공적으로 등록되었습니다!');
+      // 2. 로컬 스토리지에도 저장 (백업 + 즉시 표시용)
+      try {
+        const existingProducts = JSON.parse(localStorage.getItem('products') || '[]');
+        
+        const newProduct = {
+          id: supabaseData?.[0]?.id || Date.now(), // Supabase ID 사용 또는 타임스탬프
+          name: formData.name,
+          price: parseInt(formData.price),
+          image: formData.image,
+          description: formData.description,
+          location: formData.location,
+          tradeMethod: formData.tradeMethod,
+          uploadTime: new Date().toISOString(),
+          isFromSupabase: savedSuccessfully
+        };
+
+        const updatedProducts = [newProduct, ...existingProducts];
+        localStorage.setItem('products', JSON.stringify(updatedProducts));
+      } catch (localError) {
+        console.error('로컬 스토리지 저장 오류:', localError);
+      }
+
+      // 성공 메시지
+      if (savedSuccessfully) {
+        alert('상품이 성공적으로 등록되었습니다!');
+      } else {
+        alert('상품이 등록되었습니다. (오프라인 모드)');
+      }
       
       // products 페이지로 리다이렉트
       router.push('/products');
       
     } catch (error) {
       console.error('상품 등록 실패:', error);
-      alert('상품 등록에 실패했습니다. 다시 시도해주세요.');
+      
+      // 최종 에러 시 로컬 스토리지에라도 저장 시도
+      try {
+        const existingProducts = JSON.parse(localStorage.getItem('products') || '[]');
+        const newProduct = {
+          id: Date.now(),
+          name: formData.name,
+          price: parseInt(formData.price),
+          image: formData.image,
+          description: formData.description,
+          location: formData.location,
+          tradeMethod: formData.tradeMethod,
+          uploadTime: new Date().toISOString(),
+          isFromSupabase: false
+        };
+        
+        const updatedProducts = [newProduct, ...existingProducts];
+        localStorage.setItem('products', JSON.stringify(updatedProducts));
+        
+        alert('상품이 등록되었습니다. (오프라인 모드)');
+        router.push('/products');
+      } catch (fallbackError) {
+        console.error('최종 저장 실패:', fallbackError);
+        alert('상품 등록에 실패했습니다. 다시 시도해주세요.');
+      }
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // 아이콘에서 카테고리 이름 추출하는 헬퍼 함수
+  const getIconCategory = (icon) => {
+    const iconMap = {
+      '📱': 'electronics',
+      '👕': 'clothing', 
+      '💻': 'computer',
+      '🎧': 'audio',
+      '🎮': 'game',
+      '📚': 'book',
+      '🏠': 'household',
+      '🚗': 'automotive'
+    };
+    return iconMap[icon] || 'others';
   };
 
   return (
