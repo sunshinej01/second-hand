@@ -3,9 +3,11 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { productAPI } from '../../lib/api';
+import { useAuth } from '../../lib/auth-context';
 
 export default function AddProductPage() {
   const router = useRouter();
+  const { user } = useAuth();
   
   // 폼 상태 관리
   const [formData, setFormData] = useState({
@@ -96,7 +98,8 @@ export default function AddProductPage() {
         image_data: JSON.stringify(formData.image),
         // 필요한 추가 필드들
         category: getIconCategory(formData.image.icon),
-        status: 'available' // 판매중
+        status: 'available', // 판매중
+        user_id: user?.id // 현재 로그인한 사용자 ID
       };
 
       // 1. Supabase에 저장 시도

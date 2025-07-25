@@ -81,7 +81,7 @@ export default function ProductsPage() {
 
   // 탭별 개수 업데이트 (메모이제이션)
   const updateTabCounts = useCallback((allProducts) => {
-    const secondhandCount = allProducts.length;
+    const secondhandCount = allProducts.filter(p => p.isFromSupabase).length;
     const communityCount = communityPosts.length;
     const questionCount = 0; // 추후 질문 데이터 추가 시 업데이트
     
@@ -188,7 +188,8 @@ export default function ProductsPage() {
       image: { color: '#4338CA', icon: '📱' },
       description: '직거래 선호합니다. 액정 깨끗하고 배터리 성능 좋아요',
       location: '서울 강남구',
-      uploadTime: new Date(Date.now() - 2 * 60 * 60 * 1000) // 2시간 전
+      uploadTime: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2시간 전
+      isFromSupabase: false // 기본 데이터는 로컬 데이터임을 표시
     },
     {
       id: 2,
@@ -197,7 +198,8 @@ export default function ProductsPage() {
       image: { color: '#059669', icon: '📱' },
       description: '케이스, 보호필름 사용해서 거의 새거같아요. 충전기 포함',
       location: '서울 홍대입구',
-      uploadTime: new Date(Date.now() - 5 * 60 * 60 * 1000) // 5시간 전
+      uploadTime: new Date(Date.now() - 5 * 60 * 60 * 1000), // 5시간 전
+      isFromSupabase: false // 기본 데이터는 로컬 데이터임을 표시
     },
     {
       id: 3,
@@ -206,7 +208,8 @@ export default function ProductsPage() {
       image: { color: '#DC2626', icon: '💻' },
       description: '2023년 구입 맥북프로입니다. 사이클 50회 미만, 거의 안쓴거 같아요',
       location: '경기 분당구',
-      uploadTime: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) // 1일 전
+      uploadTime: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), // 1일 전
+      isFromSupabase: false // 기본 데이터는 로컬 데이터임을 표시
     },
     {
       id: 4,
@@ -215,7 +218,8 @@ export default function ProductsPage() {
       image: { color: '#7C3AED', icon: '🎧' },
       description: '정품 에어팟 프로 2세대 팝니다. 케이스 약간 기스 있지만 기능상 문제없어요',
       location: '서울 잠실',
-      uploadTime: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) // 3일 전
+      uploadTime: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3일 전
+      isFromSupabase: false // 기본 데이터는 로컬 데이터임을 표시
     },
     {
       id: 5,
@@ -224,7 +228,8 @@ export default function ProductsPage() {
       image: { color: '#EA580C', icon: '🎮' },
       description: '닌텐도 스위치 OLED 모델이에요. 젤다 게임 포함해서 드려요',
       location: '인천 부평구',
-      uploadTime: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000) // 6일 전
+      uploadTime: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000), // 6일 전
+      isFromSupabase: false // 기본 데이터는 로컬 데이터임을 표시
     },
     {
       id: 6,
@@ -233,7 +238,8 @@ export default function ProductsPage() {
       image: { color: '#0891B2', icon: '📱' },
       description: '아이패드 에어 5세대 와이파이 모델입니다. 애플펜슬 호환되요',
       location: '서울 마포구',
-      uploadTime: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) // 8일 전
+      uploadTime: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000), // 8일 전
+      isFromSupabase: false // 기본 데이터는 로컬 데이터임을 표시
     }
   ], []);
 
@@ -242,71 +248,39 @@ export default function ProductsPage() {
     const loadProducts = async () => {
       try {
         setIsLoading(true);
-        
         // Supabase에서 모든 제품 조회
         const { data: supabaseProducts, error } = await productAPI.getAllProducts();
-        
         if (error) {
           console.error('Supabase 제품 조회 오류:', error);
-          // 에러 시 기본 상품 표시
-          setProducts(defaultProducts);
-          updateTabCounts(defaultProducts);
+          setProducts([]);
+          updateTabCounts([]);
           return;
         }
-
-        // Supabase 데이터가 있으면 사용, 없으면 기본 데이터 사용
-        let allProducts = [];
-        
-        if (supabaseProducts && supabaseProducts.length > 0) {
-          // Supabase 데이터를 앱에서 사용하는 형태로 변환
-          const convertedProducts = supabaseProducts.map(product => ({
-            id: product.id,
-            name: product.title || product.name,
-            price: product.price,
-            image: product.image_url ? { url: product.image_url } : { color: '#4338CA', icon: '📱' },
-            description: product.description,
-            location: product.location || '위치 미등록',
-            uploadTime: new Date(product.created_at)
-          }));
-          allProducts = convertedProducts;
-        } else {
-          // Supabase에 데이터가 없으면 기본 데이터 사용
-          allProducts = defaultProducts;
-        }
-
-        // 로컬 스토리지의 추가 상품도 함께 로드
-        try {
-          const savedProducts = JSON.parse(localStorage.getItem('products') || '[]');
-          if (savedProducts.length > 0) {
-            const processedSavedProducts = savedProducts.map(product => ({
-              ...product,
-              uploadTime: new Date(product.uploadTime)
-            }));
-            setUserProducts(processedSavedProducts);
-            allProducts = [...allProducts, ...processedSavedProducts];
-          }
-        } catch (localError) {
-          console.error('로컬 스토리지 데이터 로드 오류:', localError);
-        }
-
-        // 최신순으로 정렬
-        allProducts.sort((a, b) => new Date(b.uploadTime) - new Date(a.uploadTime));
-        
-        setProducts(allProducts);
-        updateTabCounts(allProducts);
-        
+        // Supabase 데이터만 사용
+        const convertedProducts = (supabaseProducts || []).map(product => ({
+          id: product.id,
+          name: product.title || product.name,
+          price: product.price,
+          image: product.image_url ? { url: product.image_url } : { color: '#4338CA', icon: '📱' },
+          description: product.description,
+          location: product.location || '위치 미등록',
+          uploadTime: new Date(product.created_at),
+          isFromSupabase: true
+        }));
+        // 최신순 정렬
+        convertedProducts.sort((a, b) => new Date(b.uploadTime) - new Date(a.uploadTime));
+        setProducts(convertedProducts);
+        updateTabCounts(convertedProducts);
       } catch (error) {
         console.error('상품 목록 로드 실패:', error);
-        // 최종 에러 시 기본 상품 표시
-        setProducts(defaultProducts);
-        updateTabCounts(defaultProducts);
+        setProducts([]);
+        updateTabCounts([]);
       } finally {
         setIsLoading(false);
       }
     };
-
     loadProducts();
-  }, [defaultProducts, updateTabCounts]);
+  }, [updateTabCounts]);
 
   // 페이지가 포커스될 때마다 상품 목록 새로고침 (최적화)
   useEffect(() => {
@@ -319,7 +293,8 @@ export default function ProductsPage() {
           if (savedProducts.length !== userProducts.length) {
             const processedSavedProducts = savedProducts.map(product => ({
               ...product,
-              uploadTime: new Date(product.uploadTime)
+              uploadTime: new Date(product.uploadTime),
+              isFromSupabase: false // 로컬 데이터임을 표시
             }));
             
             setUserProducts(processedSavedProducts);
@@ -392,8 +367,10 @@ export default function ProductsPage() {
         <div className="w-full max-w-sm sm:max-w-md lg:max-w-lg xl:max-w-xl mx-auto bg-white shadow-sm">
                   <div className="divide-y divide-gray-100">
           {products.map(product => (
-            <ProductCard 
-              key={product.id}
+            <ProductCard
+              key={
+                (product.isFromSupabase ? 'sb-' : product.isFromSupabase === false ? 'local-' : 'dummy-') + product.id
+              }
               product={product}
             />
           ))}
@@ -420,7 +397,9 @@ export default function ProductsPage() {
             {/* 중고거래 상품 */}
             {products.map(product => (
               <ProductCard 
-                key={`product-${product.id}`}
+                key={
+                  (product.isFromSupabase ? 'sb-' : product.isFromSupabase === false ? 'local-' : 'dummy-') + product.id
+                }
                 product={product}
               />
             ))}

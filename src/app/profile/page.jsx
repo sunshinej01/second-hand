@@ -200,11 +200,9 @@ export default function ProfilePage() {
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">
-                    {userProfile?.nickname
-                      ? userProfile.nickname
-                      : userProfile && !userProfile.nickname
-                        ? '닉네임 미설정'
-                        : user?.email || '사용자'}
+                    {userProfile
+                      ? (userProfile.nickname ? userProfile.nickname : '닉네임 미설정')
+                      : '사용자'}
                   </h2>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-blue-500 font-medium">
